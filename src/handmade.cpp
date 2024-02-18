@@ -1,9 +1,9 @@
 #include <stdint.h>
 
-#define HM_TARGET_FRAMES_PER_SECOND 60
-#define HM_TARGET_SECONDS_PER_FRAME (1.0f / (float)HM_TARGET_FRAMES_PER_SECOND)
-
 namespace hm {
+
+constexpr uint32_t TargetFramesPerSecond = 60;
+constexpr float TargetSecondsPerFrame = (1.0f / (float)TargetFramesPerSecond);
 
 struct FrameBuffer {
 	uint32_t width;
