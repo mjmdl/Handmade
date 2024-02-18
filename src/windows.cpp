@@ -180,11 +180,17 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comm
 
 	if (!device_context)
 		return FALSE;
-
+	
 	win::WindowBuffer window_buffer = {};
 	win::resize_window_buffer(&window_buffer, 1440, 810);
-	u8 render_x_offset = 0;
-	u8 render_y_offset = 0;
+
+	hm::GameMemory game_memory = {};
+	game_memory.persistent_bytes = MEBIBYTES(64);
+	game_memory.transient_bytes = GIBIBYTES(1);
+	game_memory.persistent = VirtualAlloc(nullptr, game_memory.persistent_bytes, (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE);
+	game_memory.transient = VirtualAlloc(((u8 *)game_memory.persistent + game_memory.persistent_bytes), game_memory.transient_bytes,
+										 (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE);
+	ASSERT(game_memory.persistent && game_memory.transient);
 	
 	bool keep_running = true;
 	MSG message = {};
@@ -199,7 +205,7 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comm
 			}
 		}
 
-		hm::render_gradient(&window_buffer.frame, render_x_offset++, render_y_offset++);		
+		hm::update_and_render(&game_memory, &window_buffer.frame);		
 
 		win::WindowSize window_size = win::get_window_size(window);
 		win::present_window_buffer(&window_buffer, device_context, window_size.width, window_size.height);
