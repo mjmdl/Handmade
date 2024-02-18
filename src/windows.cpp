@@ -15,6 +15,15 @@ struct WindowSize {
 	u32 height;
 };
 
+struct InputState {
+	hm::InputControl *old_input;
+	hm::InputControl *new_input;
+};
+
+struct WindowData {
+	InputState *input;
+};
+
 struct FrameTimer {
 	bool sleep_is_granular;
 	u64 last_ticks;
@@ -131,6 +140,43 @@ static inline void present_window_buffer(WindowBuffer *buffer, HDC context, u32 
 				  buffer->frame.memory, &buffer->bitmap_info, DIB_RGB_COLORS, SRCCOPY);
 }
 
+static inline void handle_button(hm::ButtonState *button, bool is_down)
+{
+	button->ended_down = is_down;
+	button->transition_count++;
+}
+
+static bool handle_keyboard(hm::InputControl *input, u64 key_code, u64 flags)
+{
+	bool is_alt_down = (flags & (1 << 29));
+	bool was_down = (flags & (1 << 30));
+	bool is_down = !(flags & (1 << 31));
+
+	if (is_down == was_down)
+		return false;
+
+	switch (key_code) {
+	case 'W':
+		handle_button(&input->move.north, is_down);
+		return true;
+		
+	case 'A':
+		handle_button(&input->move.west, is_down);
+		return true;
+
+	case 'S':
+		handle_button(&input->move.south, is_down);
+		return true;
+
+	case 'D':
+		handle_button(&input->move.east, is_down);
+		return true;
+	
+	default:
+		return false;
+	}
+}
+
 static LRESULT CALLBACK window_procedure(HWND window, UINT message, WPARAM w_param, LPARAM l_param)
 {
 	switch (message) {
@@ -142,6 +188,30 @@ static LRESULT CALLBACK window_procedure(HWND window, UINT message, WPARAM w_par
 		PostQuitMessage(0);
 		return 0;
 
+	case WM_KEYDOWN:
+	case WM_KEYUP:
+	case WM_SYSKEYDOWN:
+	case WM_SYSKEYUP: {
+		WindowData *data = (WindowData *)GetWindowLongPtr(window, GWLP_USERDATA);
+		if (handle_keyboard(data->input->new_input, w_param, l_param))
+			return 0;
+
+		return DefWindowProc(window, message, w_param, l_param);
+	}
+
+	case WM_MOUSEMOVE: {
+		WindowData *data = (WindowData *)GetWindowLongPtr(window, GWLP_USERDATA);
+		hm::InputControl *old_input = data->input->old_input;
+		hm::InputControl *new_input = data->input->new_input;
+
+		new_input->mouse_x = LOWORD(l_param);
+		new_input->mouse_y = HIWORD(l_param);
+		new_input->mouse_delta_x = (new_input->mouse_x - old_input->mouse_x);
+		new_input->mouse_delta_y = (new_input->mouse_y - old_input->mouse_y);
+		
+		return 0;
+	}
+		
 	default:
 		return DefWindowProc(window, message, w_param, l_param);
 	}
@@ -192,6 +262,15 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comm
 										 (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE);
 	ASSERT(game_memory.persistent && game_memory.transient);
 	
+	hm::InputControl input_controls[2] = {};
+	win::InputState input_state;
+	input_state.old_input = &input_controls[0];
+	input_state.new_input = &input_controls[1];
+	
+	win::WindowData window_data;
+	window_data.input = &input_state;
+	SetWindowLongPtr(window, GWLP_USERDATA, (LONG_PTR)&window_data);
+	
 	bool keep_running = true;
 	MSG message = {};
 
@@ -205,8 +284,16 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comm
 			}
 		}
 
-		hm::update_and_render(&game_memory, &window_buffer.frame);		
+		hm::update_and_render(&game_memory, &window_buffer.frame, input_state.new_input);
 
+		hm::InputControl *temp_old_input = input_state.old_input;
+		input_state.old_input = input_state.new_input;
+		input_state.new_input = temp_old_input;
+
+		*input_state.new_input = {};
+		for (u32 m = 0; (m < ARRAYLENGTH(input_state.old_input->moves)); m++)
+			input_state.new_input->moves[m].ended_down = input_state.old_input->moves[m].ended_down;
+		
 		win::WindowSize window_size = win::get_window_size(window);
 		win::present_window_buffer(&window_buffer, device_context, window_size.width, window_size.height);
 
