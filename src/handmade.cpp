@@ -1,27 +1,27 @@
-#include <stdint.h>
+#include "handmade.hh"
 
 namespace hm {
 
-constexpr uint32_t TargetFramesPerSecond = 60;
-constexpr float TargetSecondsPerFrame = (1.0f / (float)TargetFramesPerSecond);
+constexpr u32 TargetFramesPerSecond = 60;
+constexpr f32 TargetSecondsPerFrame = (1.0f / (f32)TargetFramesPerSecond);
 
 struct FrameBuffer {
-	uint32_t width;
-	uint32_t height;
-	uint32_t pitch;
+	u32 width;
+	u32 height;
+	u32 pitch;
 	void *memory;
 };
 
-static void render_gradient(FrameBuffer *frame, uint8_t x_offset, uint8_t y_offset)
+static void render_gradient(FrameBuffer *frame, u8 x_offset, u8 y_offset)
 {
-	uint8_t *row = (uint8_t *)frame->memory;
+	u8 *row = (u8 *)frame->memory;
 	
-	for (uint32_t y = 0; (y < frame->height); y++) {
-		uint32_t *pixel = (uint32_t *)row;
-		uint8_t green = (uint8_t)(y + y_offset);
+	for (u32 y = 0; (y < frame->height); y++) {
+		u32 *pixel = (u32 *)row;
+		u8 green = (u8)(y + y_offset);
 
-		for (uint32_t x = 0; (x < frame->width); x++) {
-			uint8_t blue = (uint8_t)(x + x_offset);
+		for (u32 x = 0; (x < frame->width); x++) {
+			u8 blue = (u8)(x + x_offset);
 			*pixel++ = ((green << 8) | blue);
 		}
 		

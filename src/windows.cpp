@@ -5,64 +5,64 @@
 namespace win {
 
 struct WindowBuffer {
-	uint8_t pixel_bytes;
+	u8 pixel_bytes;
 	hm::FrameBuffer frame;
 	BITMAPINFO bitmap_info;
 };
 
 struct WindowSize {
-	uint32_t width;
-	uint32_t height;
+	u32 width;
+	u32 height;
 };
 
 struct FrameTimer {
 	bool sleep_is_granular;
-	uint64_t last_ticks;
-	uint64_t end_ticks;
-	float delta_seconds;
-	uint64_t last_cycles;
-	uint64_t end_cycles;
-	uint64_t delta_cycles;
+	u64 last_ticks;
+	u64 end_ticks;
+	f32 delta_seconds;
+	u64 last_cycles;
+	u64 end_cycles;
+	u64 delta_cycles;
 };
 
-static uint64_t performance_frequency;
+static u64 performance_frequency;
 
-static inline uint64_t get_ticks()
+static inline u64 get_ticks()
 {
 	LARGE_INTEGER counter;
 	QueryPerformanceCounter(&counter);
 	return counter.QuadPart;
 }
 
-static inline int64_t get_cycles()
+static inline i64 get_cycles()
 {
 	return __rdtsc();
 }
 
-static inline float get_delta_seconds(uint64_t start, uint64_t end)
+static inline f32 get_delta_seconds(u64 start, u64 end)
 {
-	float delta = (float)(end - start);
-	float seconds = (delta / performance_frequency);
+	f32 delta = (f32)(end - start);
+	f32 seconds = (delta / performance_frequency);
 	return seconds;
 }
 
 static inline void init_frame_timer(FrameTimer *timer)
 {
-	uint32_t scheduler_miliseconds = 1;
+	u32 scheduler_miliseconds = 1;
 	timer->sleep_is_granular = (timeBeginPeriod(scheduler_miliseconds) != TIMERR_NOERROR);
 	timer->last_ticks = get_ticks();
 	timer->last_cycles = get_cycles();
 }
 
-static inline void wait_for_frame(FrameTimer *timer, float seconds_per_frame)
+static inline void wait_for_frame(FrameTimer *timer, f32 seconds_per_frame)
 {
-	uint64_t ticks = get_ticks();
-	float delta_seconds = get_delta_seconds(timer->last_ticks, ticks);
+	u64 ticks = get_ticks();
+	f32 delta_seconds = get_delta_seconds(timer->last_ticks, ticks);
 	
 	while (delta_seconds < seconds_per_frame) {
 		if (timer->sleep_is_granular) {
-			float seconds_left = (seconds_per_frame - delta_seconds);
-			uint32_t miliseconds_left = (uint32_t)(1000.0f * seconds_left);
+			f32 seconds_left = (seconds_per_frame - delta_seconds);
+			u32 miliseconds_left = (u32)(1000.0f * seconds_left);
 
 			if (miliseconds_left > 0)
 				Sleep(miliseconds_left);
@@ -86,9 +86,9 @@ static inline void update_frame_timer(FrameTimer *timer)
 
 static inline void log_frame_timer(FrameTimer *timer)
 {
-	float delta_miliseconds = (timer->delta_seconds * 1000.0f);
-	float frames_per_second = (1.0f / timer->delta_seconds);
-	float frame_mega_cycles = ((float)timer->delta_cycles / 1'000'000.0f);
+	f32 delta_miliseconds = (timer->delta_seconds * 1000.0f);
+	f32 frames_per_second = (1.0f / timer->delta_seconds);
+	f32 frame_mega_cycles = ((f32)timer->delta_cycles / 1'000'000.0f);
 	
 	char buffer[256];
 	sprintf_s(buffer, sizeof(buffer), "%.2f ms, %.2f fps, %.2f Mcpf\n", delta_miliseconds, frames_per_second, frame_mega_cycles);
@@ -106,9 +106,9 @@ static inline WindowSize get_window_size(HWND window)
 	return size;
 }
 
-static void resize_window_buffer(WindowBuffer *buffer, uint32_t width, uint32_t height)
+static void resize_window_buffer(WindowBuffer *buffer, u32 width, u32 height)
 {
-	uint8_t pixel_bytes = (buffer->pixel_bytes = 4);
+	u8 pixel_bytes = (buffer->pixel_bytes = 4);
 	buffer->frame.width = width;
 	buffer->frame.height = height;
 	buffer->frame.pitch = (pixel_bytes * width);
@@ -125,7 +125,7 @@ static void resize_window_buffer(WindowBuffer *buffer, uint32_t width, uint32_t 
 	buffer->bitmap_info.bmiHeader.biCompression = BI_RGB;
 }
 
-static inline void present_window_buffer(WindowBuffer *buffer, HDC context, uint32_t width, uint32_t height)
+static inline void present_window_buffer(WindowBuffer *buffer, HDC context, u32 width, u32 height)
 {
 	StretchDIBits(context, 0, 0, width, height, 0, 0, buffer->frame.width, buffer->frame.height,
 				  buffer->frame.memory, &buffer->bitmap_info, DIB_RGB_COLORS, SRCCOPY);
@@ -165,8 +165,8 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comm
 	if (!RegisterClassA(&window_class))
 		return FALSE;
 
-	int screen_width = GetSystemMetrics(SM_CXSCREEN);
-	int screen_height = GetSystemMetrics(SM_CYSCREEN);
+	i32 screen_width = GetSystemMetrics(SM_CXSCREEN);
+	i32 screen_height = GetSystemMetrics(SM_CYSCREEN);
 
 	HWND window = CreateWindowExA(
 		0, window_class.lpszClassName, "Handmade", (WS_OVERLAPPEDWINDOW | WS_VISIBLE),
@@ -183,8 +183,8 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comm
 
 	win::WindowBuffer window_buffer = {};
 	win::resize_window_buffer(&window_buffer, 1440, 810);
-	uint8_t render_x_offset = 0;
-	uint8_t render_y_offset = 0;
+	u8 render_x_offset = 0;
+	u8 render_y_offset = 0;
 	
 	bool keep_running = true;
 	MSG message = {};
