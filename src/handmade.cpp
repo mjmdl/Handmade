@@ -1,5 +1,8 @@
 #include <stdint.h>
 
+#define HM_TARGET_FRAMES_PER_SECOND 60
+#define HM_TARGET_SECONDS_PER_FRAME (1.0f / (float)HM_TARGET_FRAMES_PER_SECOND)
+
 namespace hm {
 
 struct FrameBuffer {

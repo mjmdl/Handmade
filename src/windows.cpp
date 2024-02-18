@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "handmade.cpp"
 #include <windows.h>
 
@@ -14,7 +15,28 @@ struct WindowSize {
 	uint32_t height;
 };
 
-static WindowSize get_window_size(HWND window)
+static uint64_t performance_frequency;
+
+static inline uint64_t get_ticks()
+{
+	LARGE_INTEGER counter;
+	QueryPerformanceCounter(&counter);
+	return counter.QuadPart;
+}
+
+static inline int64_t get_cycles()
+{
+	return __rdtsc();
+}
+
+static inline float get_delta_seconds(uint64_t start, uint64_t end)
+{
+	float delta = (float)(end - start);
+	float seconds = (delta / performance_frequency);
+	return seconds;
+}
+
+static inline WindowSize get_window_size(HWND window)
 {
 	RECT rect;
 	GetClientRect(window, &rect);
@@ -70,6 +92,12 @@ static LRESULT CALLBACK window_procedure(HWND window, UINT message, WPARAM w_par
 
 int APIENTRY WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR command_line, int command_show)
 {
+	QueryPerformanceFrequency((LARGE_INTEGER *)&win::performance_frequency);	
+	uint64_t last_ticks = win::get_ticks();
+	uint64_t last_cycles = win::get_cycles();
+	uint32_t scheduler_miliseconds = 1;
+	bool sleep_is_granular = (timeBeginPeriod(scheduler_miliseconds) != TIMERR_NOERROR);
+	
 	WNDCLASSA window_class = {};
 	window_class.style = (CS_OWNDC | CS_HREDRAW | CS_VREDRAW);
 	window_class.lpfnWndProc = win::window_procedure;
@@ -117,6 +145,37 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comm
 
 		win::WindowSize window_size = win::get_window_size(window);
 		win::present_window_buffer(&window_buffer, device_context, window_size.width, window_size.height);
+
+		uint64_t test_ticks = win::get_ticks();
+		float test_delta_seconds = win::get_delta_seconds(last_ticks, test_ticks);
+		while (test_delta_seconds < HM_TARGET_SECONDS_PER_FRAME) {
+			if (sleep_is_granular) {
+				float seconds_left = ((float)HM_TARGET_SECONDS_PER_FRAME - test_delta_seconds);
+				uint32_t miliseconds_left = (uint32_t)(1000.0f * seconds_left);
+
+				if (miliseconds_left > 0)
+					Sleep(miliseconds_left);
+			}
+
+			test_ticks = win::get_ticks();
+			test_delta_seconds = win::get_delta_seconds(last_ticks, test_ticks);
+		}
+
+		uint64_t end_ticks = win::get_ticks();
+		float delta_seconds = win::get_delta_seconds(last_ticks, end_ticks);
+		last_ticks = end_ticks;
+
+		int64_t end_cycles = win::get_cycles();
+		int64_t delta_cycles = (end_cycles - last_cycles);
+		last_cycles = end_cycles;
+
+		float delta_miliseconds = (delta_seconds * 1000.0f);
+		float frames_per_second = (1.0f / delta_seconds);
+		float frame_mega_cycles = ((float)delta_cycles / 1'000'000.0f);
+		char timer_logger[256];
+		sprintf_s(timer_logger, sizeof(timer_logger), "%.2f ms, %.2f fps, %.2f Mcpf\n",
+				  delta_miliseconds, frames_per_second, frame_mega_cycles);
+		OutputDebugStringA(timer_logger);
 	}
 
 	return (int)message.wParam;
