@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "handmade.cpp"
 #include <windows.h>
+#include <dsound.h>
 
 namespace win {
 
@@ -32,6 +33,13 @@ struct FrameTimer {
 	u64 last_cycles;
 	u64 end_cycles;
 	u64 delta_cycles;
+};
+
+struct SoundSpec {
+	u16 channels;
+	u32 samples_per_second;
+	u16 bytes_per_sample;
+	u32 buffer_bytes;
 };
 
 static u64 performance_frequency;
@@ -100,8 +108,69 @@ static inline void log_frame_timer(FrameTimer *timer)
 	f32 frame_mega_cycles = ((f32)timer->delta_cycles / 1'000'000.0f);
 	
 	char buffer[256];
-	sprintf_s(buffer, sizeof(buffer), "%.2f ms, %.2f fps, %.2f Mcpf\n", delta_miliseconds, frames_per_second, frame_mega_cycles);
+	sprintf_s(buffer, sizeof(buffer), "%.2f ms, %.2f fps, %.2f Mcpf\n",
+			  delta_miliseconds, frames_per_second, frame_mega_cycles);
 	OutputDebugStringA(buffer);
+}
+
+static LPDIRECTSOUNDBUFFER init_direct_sound(SoundSpec *spec, HWND window)
+{
+	DSBUFFERDESC desc = {};
+	WAVEFORMATEX format = {};
+	
+	HMODULE dsound_lib = LoadLibraryA("dsound.dll");
+	if (!dsound_lib)
+		return nullptr;
+
+	typedef HRESULT(WINAPI *DirectSoundCreateFn)(LPCGUID, LPDIRECTSOUND *, LPUNKNOWN);
+	DirectSoundCreateFn DirectSoundCreate = (DirectSoundCreateFn)GetProcAddress(dsound_lib, "DirectSoundCreate");
+	if (!DirectSoundCreate)
+		goto error_free_library;
+	
+	LPDIRECTSOUND dsound;
+	if (FAILED(DirectSoundCreate(nullptr, &dsound, nullptr)))
+		goto error_free_library;
+
+	if (FAILED(dsound->SetCooperativeLevel(window, DSSCL_PRIORITY)))
+		goto error_release_dsound;
+
+	desc.dwSize = sizeof(desc);
+	desc.dwFlags = DSBCAPS_PRIMARYBUFFER;
+
+	LPDIRECTSOUNDBUFFER primary;
+	if (FAILED(dsound->CreateSoundBuffer(&desc, &primary, nullptr)))
+		goto error_release_dsound;
+	
+	format.wFormatTag = WAVE_FORMAT_PCM;
+	format.nChannels = spec->channels;
+	format.nSamplesPerSec = spec->samples_per_second;
+	format.wBitsPerSample = (spec->bytes_per_sample * 8);
+	format.nBlockAlign = (format.nChannels * format.wBitsPerSample / 8);
+	format.nAvgBytesPerSec = (format.nSamplesPerSec * format.nBlockAlign);
+	
+	if (FAILED(primary->SetFormat(&format)))
+		goto error_free_primary;
+
+	desc.dwFlags = 0;
+	desc.dwBufferBytes = spec->buffer_bytes;
+	desc.lpwfxFormat = &format;
+
+	LPDIRECTSOUNDBUFFER secondary;
+	if (FAILED(dsound->CreateSoundBuffer(&desc, &secondary, nullptr)))
+		goto error_free_primary;
+
+	primary->Release();
+	return secondary;
+
+error_free_primary:
+	primary->Release();
+	
+error_release_dsound:
+	dsound->Release();
+	
+error_free_library:
+	FreeLibrary(dsound_lib);
+	return nullptr;
 }
 
 static inline WindowSize get_window_size(HWND window)
@@ -250,7 +319,21 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comm
 
 	if (!device_context)
 		return FALSE;
+
+	win::SoundSpec sound_spec = {};
+	sound_spec.channels = 2;
+	sound_spec.samples_per_second = 48'000;
+	sound_spec.bytes_per_sample = (sound_spec.channels * sizeof(i16));
+	sound_spec.buffer_bytes = (sound_spec.samples_per_second * sound_spec.bytes_per_sample);
 	
+	LPDIRECTSOUNDBUFFER sound_buffer = win::init_direct_sound(&sound_spec, window);
+	if (sound_buffer) {
+		if (FAILED(sound_buffer->Play(0, 0, DSBPLAY_LOOPING))) {
+			sound_buffer->Release();
+			sound_buffer = nullptr;
+		}
+	}
+
 	win::WindowBuffer window_buffer = {};
 	win::resize_window_buffer(&window_buffer, 1440, 810);
 
